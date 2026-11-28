@@ -109,16 +109,35 @@ def read_csv_safe(path_or_file):
     raise ValueError("파일 인코딩을 읽을 수 없습니다.")
 
 
+def make_sample_data():
+    """내장 샘플 데이터 (CSV 파일이 없어도 바로 시연 가능). 시드를 고정해 항상 같은 데이터가 나옵니다."""
+    rng = np.random.default_rng(42)
+    products = [
+        ("SKU-001", "무선 이어폰", "전자기기", 120, 45000, 5, 20),
+        ("SKU-002", "보조배터리", "전자기기", 400, 25000, 7, 30),
+        ("SKU-003", "텀블러", "생활용품", 90, 15000, 4, 18),
+        ("SKU-004", "물티슈(10팩)", "생활용품", 700, 8000, 3, 60),
+        ("SKU-005", "요가매트", "스포츠", 35, 22000, 10, 6),
+        ("SKU-006", "프로틴바(박스)", "식품", 150, 18000, 6, 22),
+        ("SKU-007", "USB-C 케이블", "전자기기", 260, 7000, 5, 35),
+        ("SKU-008", "에코백", "패션잡화", 500, 9000, 8, 14),
+    ]
+    inv = pd.DataFrame(products, columns=INV_COLS + ["_mu"])
+    dates = pd.date_range("2026-08-26", periods=90, freq="D")
+    rows = []
+    for _, p in inv.iterrows():
+        weekly = np.where(dates.dayofweek >= 5, 1.3, 1.0)  # 주말 수요 증가
+        trend = np.linspace(0.9, 1.15, len(dates)) if p.SKU in ("SKU-001", "SKU-006") else 1.0
+        qty = rng.poisson(p["_mu"] * weekly * trend)
+        rows += [(d, p.SKU, int(q)) for d, q in zip(dates, qty)]
+    sales = pd.DataFrame(rows, columns=SALES_COLS)
+    return inv.drop(columns="_mu"), sales
+
+
 def init_state():
-    if "inv" not in st.session_state:
-        st.session_state.inv = read_csv_safe("inventory.csv") if os.path.exists("inventory.csv") else None
-    if "sales" not in st.session_state:
-        if os.path.exists("sales_data.csv"):
-            s = read_csv_safe("sales_data.csv")
-            s["Date"] = pd.to_datetime(s["Date"])
-            st.session_state.sales = s
-        else:
-            st.session_state.sales = None
+    # 기본값 = 내장 샘플 데이터. 데이터 관리 화면에서 CSV를 업로드하면 교체됩니다.
+    if "inv" not in st.session_state or "sales" not in st.session_state:
+        st.session_state.inv, st.session_state.sales = make_sample_data()
 
 
 def check_columns(df, required, name):
@@ -430,7 +449,8 @@ elif menu == "⚙️ 재주문점·발주 추천":
 # ------------------------------------------------------------------
 elif menu == "🗄️ 데이터 관리":
     st.subheader("🗄️ 데이터 업로드 및 관리")
-    st.write("CSV 파일을 업로드하면 시스템 전체에 즉시 반영됩니다.")
+    st.info("💡 기본값은 **내장 샘플 데이터**입니다. 아래에서 CSV를 업로드하면 해당 데이터로 교체되고, "
+            "'샘플 데이터로 초기화' 버튼으로 언제든 되돌릴 수 있습니다.")
 
     col1, col2 = st.columns(2)
     with col1:
